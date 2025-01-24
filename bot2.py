@@ -150,6 +150,32 @@ def get_user_sections(full_name):
     return [row[2] for row in data if row[0] == full_name]
 
 
+def get_available_sections(class_level, user_sections):
+    occupied_days = set()
+
+    for section in user_sections:
+        section_days = set(sections[section]['дни'].split('/'))
+        occupied_days.update(section_days)
+
+    available_sections = []
+
+    for section, details in sections.items():
+        # Проверяем соответствие возраста
+        if not is_section_available_for_class(details, class_level):
+            continue
+
+        section_days = set(details['дни'].split('/'))
+
+        # Если указаны дни для исключения
+        if section_days.intersection(occupied_days):
+            continue
+
+        available_sections.append(section)
+
+    return available_sections
+
+
+
 def extract_class_level(school_class):
     # Извлекаем первую цифру класса
     match = re.search(r'^(\d+)', school_class)
@@ -245,11 +271,9 @@ def get_user_data(message):
 
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 
-    # Фильтруем секции по возрасту
-    available_sections = [
-        section for section, details in sections.items()
-        if is_section_available_for_class(details, class_level)
-    ]
+    user_sections = get_user_sections(full_name)
+
+    available_sections = get_available_sections(class_level, user_sections)
 
     for section in available_sections:
         filled = count_section(section)
@@ -258,7 +282,7 @@ def get_user_data(message):
         keyboard.add(f"{section}, {days} ({filled}/{max_capacity})")
 
     if not available_sections:
-        bot.send_message(message.chat.id, "Для вашего класса нет доступных секций.\n/start")
+        bot.send_message(message.chat.id, "Нет доступных секций.")
         return
 
     bot.send_message(message.chat.id, "Выберите секцию:", reply_markup=keyboard)
@@ -273,7 +297,7 @@ def register_user(message, full_name, school_class):
         return
 
     # Разбиваем текст на название секции и дни
-    selected_section_info = message.text.split(", ")
+    selected_section_info: list[str] = message.text.split(", ")
 
     if len(selected_section_info) < 2:
         bot.send_message(message.chat.id, "Неверный формат выбора секции.")
